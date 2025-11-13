@@ -158,7 +158,7 @@ export default function ProductList() {
           <input
             type="text"
             placeholder="🔍 Rechercher par nom ou référence..."
-            className="input input-bordered flex-1"
+            className="input input-bordered flex-1 min-h-5"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
