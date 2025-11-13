@@ -33,7 +33,8 @@ export default function ProductList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Écoute Firebase Auth pour récupérer l'utilisateur connecté
+    let unsubSnapshot: (() => void) | null = null;
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setProducts([]);
@@ -41,8 +42,12 @@ export default function ProductList() {
         return;
       }
 
-      const q = query(collection(db, "products"), where("userId", "==", user.uid));
-      const unsubSnapshot = onSnapshot(q, (snapshot) => {
+      const q = query(
+        collection(db, "products"),
+        where("userId", "==", user.uid)
+      );
+
+      unsubSnapshot = onSnapshot(q, (snapshot) => {
         const prods = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -55,15 +60,14 @@ export default function ProductList() {
         setProducts(sorted);
         setLoading(false);
       });
-
-      // Nettoyage
-      return () => unsubSnapshot();
     });
 
-    return () => unsubAuth();
+    return () => {
+      unsubAuth();
+      if (unsubSnapshot) unsubSnapshot();
+    };
   }, [sortQty]);
 
-  // Supprimer un produit
   const handleDelete = async (id: string) => {
     try {
       await deleteDoc(doc(db, "products", id));
@@ -75,14 +79,17 @@ export default function ProductList() {
     }
   };
 
-  // Modifier un produit
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
     setEditedProduct(product);
   };
 
   const handleSave = async (id: string) => {
-    if (!editedProduct.name || !editedProduct.ref || editedProduct.quantity === undefined) {
+    if (
+      !editedProduct.name ||
+      editedProduct.ref === undefined ||
+      editedProduct.quantity === undefined
+    ) {
       toast.error("Tous les champs doivent être remplis !");
       return;
     }
@@ -101,7 +108,6 @@ export default function ProductList() {
     }
   };
 
-  // Ajouter ou enlever quantité
   const changeQuantity = async (id: string, delta: number) => {
     const product = products.find((p) => p.id === id);
     if (!product) return;
@@ -122,13 +128,14 @@ export default function ProductList() {
     }
   };
 
-  // Filtrage par recherche
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.ref.toString().includes(search)
+  const filteredProducts = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.ref.toString().includes(search)
   );
 
-  if (loading) return <p className="text-center mt-4">Chargement des produits...</p>;
+  if (loading)
+    return <p className="text-center mt-4 text-gray-500">Chargement des produits...</p>;
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -189,7 +196,10 @@ export default function ProductList() {
                   className="input input-sm input-bordered w-24"
                   value={editedProduct.quantity}
                   onChange={(e) =>
-                    setEditedProduct({ ...editedProduct, quantity: Number(e.target.value) })
+                    setEditedProduct({
+                      ...editedProduct,
+                      quantity: Number(e.target.value),
+                    })
                   }
                 />
                 <button
@@ -251,9 +261,7 @@ export default function ProductList() {
       {productToDelete && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg">
-              Supprimer {productToDelete.name} ?
-            </h3>
+            <h3 className="font-bold text-lg">Supprimer {productToDelete.name} ?</h3>
             <p className="py-4">
               Cette action est irréversible. Veux-tu continuer ?
             </p>
