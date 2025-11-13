@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { addDoc, collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import { addDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Plus, Camera } from "lucide-react";
 import { BrowserMultiFormatReader } from "@zxing/library";
@@ -17,40 +17,51 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  if (!isOpen) return null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = auth.currentUser;
-    if (!user) return toast.error("Utilisateur non connecté !");
-    if (!name || ref === "" || quantity === "") return toast.error("Remplis tous les champs !");
+    if (!user || !name || ref === "" || quantity === "") {
+      toast.error("Veuillez remplir tous les champs");
+      return;
+    }
 
     try {
-      const q = query(collection(db, "products"), where("userId", "==", user.uid), where("ref", "==", Number(ref)));
+      // Vérifie si le produit existe déjà pour cet utilisateur
+      const q = query(
+        collection(db, "products"),
+        where("userId", "==", user.uid),
+        where("ref", "==", Number(ref))
+      );
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
-        const existingDoc = snapshot.docs[0];
-        const existingQty = existingDoc.data().quantity || 0;
-        await updateDoc(doc(db, "products", existingDoc.id), {
-          quantity: existingQty + Number(quantity)
+        // Produit existant : incrémente la quantité
+        const docRef = snapshot.docs[0].ref;
+        const oldQty = snapshot.docs[0].data().quantity as number;
+        await updateDoc(docRef, {
+          quantity: oldQty + Number(quantity),
         });
         toast.success("Quantité mise à jour pour le produit existant !");
       } else {
+        // Nouveau produit
         await addDoc(collection(db, "products"), {
           name,
           ref: Number(ref),
           quantity: Number(quantity),
           userId: user.uid,
         });
-        toast.success("Produit ajouté !");
+        toast.success("Produit ajouté avec succès !");
       }
 
       setName("");
       setRef("");
       setQuantity("");
       onClose();
-    } catch (error: any) {
-      console.error("Erreur lors de l'ajout du produit :", error);
-      toast.error("Erreur ajout produit: " + error.message);
+    } catch (err) {
+      console.error("Erreur ajout produit :", err);
+      toast.error("Erreur lors de l'ajout du produit");
     }
   };
 
@@ -60,15 +71,14 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
     try {
       const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
       setRef(Number(result.getText()));
+      toast.success("Code-barres scanné avec succès !");
       setScanning(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Erreur scan :", err);
-      toast.error("Erreur scan : " + err.message);
+      toast.error("Erreur lors du scan");
       setScanning(false);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="modal modal-open">
@@ -102,7 +112,9 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
             </button>
           </div>
 
-          {scanning && <video ref={videoRef} className="w-full h-64 border rounded" />}
+          {scanning && (
+            <video ref={videoRef} className="w-full h-64 border rounded" />
+          )}
 
           <input
             type="number"
