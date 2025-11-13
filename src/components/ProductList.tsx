@@ -154,7 +154,7 @@ export default function ProductList() {
     <div className="w-full max-w-3xl mx-auto">
       {/* Barre de recherche et filtre */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
-        <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full">
+        <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full min-h-5">
           <input
             type="text"
             placeholder="🔍 Rechercher par nom ou référence..."
