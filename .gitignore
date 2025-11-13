@@ -25,3 +25,5 @@ dist-ssr
 
 # Environnement
 .env
+
+src/serviceAccountKey.json
