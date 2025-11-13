@@ -11,6 +11,7 @@ import {
 import { db, auth } from "../firebase";
 import { Pencil, Trash2, Plus, Minus } from "lucide-react";
 import AddProductModal from "./AddProductModal";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface Product {
   id: string;
@@ -28,26 +29,38 @@ export default function ProductList() {
   const [editedProduct, setEditedProduct] = useState<Partial<Product>>({});
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+    let unsubscribeAuth: (() => void) | undefined;
+    let unsubscribeProducts: (() => void) | undefined;
 
-    const q = query(collection(db, "products"), where("userId", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const prods = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Product[];
+    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const q = query(collection(db, "products"), where("userId", "==", user.uid));
+        unsubscribeProducts = onSnapshot(q, (snapshot) => {
+          const prods = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Product[];
 
-      const sorted = [...prods].sort((a, b) =>
-        sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
-      );
+          const sorted = [...prods].sort((a, b) =>
+            sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
+          );
 
-      setProducts(sorted);
+          setProducts(sorted);
+          setLoading(false);
+        });
+      } else {
+        setProducts([]);
+        setLoading(false);
+      }
     });
 
-    return () => unsub();
+    return () => {
+      if (unsubscribeAuth) unsubscribeAuth();
+      if (unsubscribeProducts) unsubscribeProducts();
+    };
   }, [sortQty]);
 
   const handleDelete = async (id: string) => {
@@ -81,13 +94,30 @@ export default function ProductList() {
     }
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.ref.toString().includes(search)
+  const filteredProducts = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.ref.toString().includes(search)
   );
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-3xl mx-auto mt-6 space-y-4">
+        <div className="animate-pulse space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div
+              key={i}
+              className="h-16 bg-base-200 rounded-lg shadow-inner"
+            ></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-3xl mx-auto">
+      {/* Barre de filtres et bouton d’ajout */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
         <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full">
           <input
@@ -114,6 +144,7 @@ export default function ProductList() {
         </button>
       </div>
 
+      {/* Liste des produits */}
       <ul className="space-y-2">
         {filteredProducts.map((product) => (
           <li
@@ -136,7 +167,10 @@ export default function ProductList() {
                     className="input input-sm input-bordered w-24"
                     value={editedProduct.ref}
                     onChange={(e) =>
-                      setEditedProduct({ ...editedProduct, ref: Number(e.target.value) })
+                      setEditedProduct({
+                        ...editedProduct,
+                        ref: Number(e.target.value),
+                      })
                     }
                   />
                   <input
@@ -144,7 +178,10 @@ export default function ProductList() {
                     className="input input-sm input-bordered w-24"
                     value={editedProduct.quantity}
                     onChange={(e) =>
-                      setEditedProduct({ ...editedProduct, quantity: Number(e.target.value) })
+                      setEditedProduct({
+                        ...editedProduct,
+                        quantity: Number(e.target.value),
+                      })
                     }
                   />
                 </div>
@@ -202,8 +239,10 @@ export default function ProductList() {
         )}
       </ul>
 
+      {/* Modal d’ajout */}
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
 
+      {/* Confirmation de suppression */}
       {productToDelete && (
         <div className="modal modal-open">
           <div className="modal-box">
