@@ -42,6 +42,8 @@ export default function ProductList() {
         return;
       }
 
+      console.log("User UID:", user.uid);
+
       const q = query(
         collection(db, "products"),
         where("userId", "==", user.uid)
