@@ -1,6 +1,5 @@
 import Navbar from "../components/Navbar";
 import ProductList from "../components/ProductList";
-import DebugFirestore from "../components/DebugFirestore";
 
 export default function Home() {
   return (
