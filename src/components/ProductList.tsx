@@ -8,10 +8,11 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "../firebase";
 import { Pencil, Trash2, Plus, Minus } from "lucide-react";
 import AddProductModal from "./AddProductModal";
-import { onAuthStateChanged } from "firebase/auth";
+import { toast } from "react-hot-toast";
 
 interface Product {
   id: string;
@@ -32,92 +33,106 @@ export default function ProductList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeAuth: (() => void) | undefined;
-    let unsubscribeProducts: (() => void) | undefined;
-
-    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const q = query(collection(db, "products"), where("userId", "==", user.uid));
-        unsubscribeProducts = onSnapshot(q, (snapshot) => {
-          const prods = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Product[];
-
-          const sorted = [...prods].sort((a, b) =>
-            sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
-          );
-
-          setProducts(sorted);
-          setLoading(false);
-        });
-      } else {
+    // Écoute Firebase Auth pour récupérer l'utilisateur connecté
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
         setProducts([]);
         setLoading(false);
+        return;
       }
+
+      const q = query(collection(db, "products"), where("userId", "==", user.uid));
+      const unsubSnapshot = onSnapshot(q, (snapshot) => {
+        const prods = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Product[];
+
+        const sorted = [...prods].sort((a, b) =>
+          sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
+        );
+
+        setProducts(sorted);
+        setLoading(false);
+      });
+
+      // Nettoyage
+      return () => unsubSnapshot();
     });
 
-    return () => {
-      if (unsubscribeAuth) unsubscribeAuth();
-      if (unsubscribeProducts) unsubscribeProducts();
-    };
+    return () => unsubAuth();
   }, [sortQty]);
 
+  // Supprimer un produit
   const handleDelete = async (id: string) => {
-    await deleteDoc(doc(db, "products", id));
-    setProductToDelete(null);
+    try {
+      await deleteDoc(doc(db, "products", id));
+      toast.success("Produit supprimé !");
+      setProductToDelete(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la suppression !");
+    }
   };
 
+  // Modifier un produit
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
     setEditedProduct(product);
   };
 
   const handleSave = async (id: string) => {
-    await updateDoc(doc(db, "products", id), {
-      name: editedProduct.name,
-      ref: editedProduct.ref,
-      quantity: editedProduct.quantity,
-    });
-    setEditingId(null);
-  };
+    if (!editedProduct.name || !editedProduct.ref || editedProduct.quantity === undefined) {
+      toast.error("Tous les champs doivent être remplis !");
+      return;
+    }
 
-  const changeQuantity = async (id: string, delta: number) => {
-    const product = products.find((p) => p.id === id);
-    if (!product) return;
-    const newQty = product.quantity + delta;
-
-    if (newQty <= 0) {
-      await deleteDoc(doc(db, "products", id));
-    } else {
-      await updateDoc(doc(db, "products", id), { quantity: newQty });
+    try {
+      await updateDoc(doc(db, "products", id), {
+        name: editedProduct.name,
+        ref: editedProduct.ref,
+        quantity: editedProduct.quantity,
+      });
+      toast.success("Produit mis à jour !");
+      setEditingId(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la modification !");
     }
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.ref.toString().includes(search)
+  // Ajouter ou enlever quantité
+  const changeQuantity = async (id: string, delta: number) => {
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+
+    const newQty = product.quantity + delta;
+
+    try {
+      if (newQty <= 0) {
+        await deleteDoc(doc(db, "products", id));
+        toast.success(`Produit "${product.name}" supprimé car quantité = 0`);
+      } else {
+        await updateDoc(doc(db, "products", id), { quantity: newQty });
+        toast.success(`Quantité de "${product.name}" mise à jour`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la mise à jour de la quantité !");
+    }
+  };
+
+  // Filtrage par recherche
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.ref.toString().includes(search)
   );
 
-  if (loading) {
-    return (
-      <div className="w-full max-w-3xl mx-auto mt-6 space-y-4">
-        <div className="animate-pulse space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="h-16 bg-base-200 rounded-lg shadow-inner"
-            ></div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <p className="text-center mt-4">Chargement des produits...</p>;
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-      {/* Barre de filtres et bouton d’ajout */}
+      {/* Barre de recherche et filtre */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
         <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full">
           <input
@@ -152,84 +167,74 @@ export default function ProductList() {
             className="flex flex-col sm:flex-row justify-between items-center p-3 bg-base-100 shadow rounded-lg"
           >
             {editingId === product.id ? (
-              <>
-                <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
-                  <input
-                    type="text"
-                    className="input input-sm input-bordered flex-1"
-                    value={editedProduct.name}
-                    onChange={(e) =>
-                      setEditedProduct({ ...editedProduct, name: e.target.value })
-                    }
-                  />
-                  <input
-                    type="number"
-                    className="input input-sm input-bordered w-24"
-                    value={editedProduct.ref}
-                    onChange={(e) =>
-                      setEditedProduct({
-                        ...editedProduct,
-                        ref: Number(e.target.value),
-                      })
-                    }
-                  />
-                  <input
-                    type="number"
-                    className="input input-sm input-bordered w-24"
-                    value={editedProduct.quantity}
-                    onChange={(e) =>
-                      setEditedProduct({
-                        ...editedProduct,
-                        quantity: Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
+              <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
+                <input
+                  type="text"
+                  className="input input-sm input-bordered flex-1"
+                  value={editedProduct.name}
+                  onChange={(e) =>
+                    setEditedProduct({ ...editedProduct, name: e.target.value })
+                  }
+                />
+                <input
+                  type="number"
+                  className="input input-sm input-bordered w-24"
+                  value={editedProduct.ref}
+                  onChange={(e) =>
+                    setEditedProduct({ ...editedProduct, ref: Number(e.target.value) })
+                  }
+                />
+                <input
+                  type="number"
+                  className="input input-sm input-bordered w-24"
+                  value={editedProduct.quantity}
+                  onChange={(e) =>
+                    setEditedProduct({ ...editedProduct, quantity: Number(e.target.value) })
+                  }
+                />
                 <button
                   onClick={() => handleSave(product.id)}
                   className="btn btn-success btn-sm mt-2 sm:mt-0"
                 >
                   Sauver
                 </button>
-              </>
+              </div>
             ) : (
-              <>
-                <div className="flex justify-between items-center flex-1 w-full">
-                  <div>
-                    <p className="font-semibold">{product.name}</p>
-                    <p className="text-xs text-gray-500">Réf : {product.ref}</p>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                    <button
-                      onClick={() => changeQuantity(product.id, -1)}
-                      className="btn btn-ghost btn-sm"
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <span className="font-medium">{product.quantity}</span>
-                    <button
-                      onClick={() => changeQuantity(product.id, 1)}
-                      className="btn btn-ghost btn-sm"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                  <div className="flex gap-2 ml-2 mt-2 sm:mt-0">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="btn btn-ghost btn-sm text-blue-500"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                    <button
-                      onClick={() => setProductToDelete(product)}
-                      className="btn btn-ghost btn-sm text-red-500"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+              <div className="flex justify-between items-center flex-1 w-full">
+                <div>
+                  <p className="font-semibold">{product.name}</p>
+                  <p className="text-xs text-gray-500">Réf : {product.ref}</p>
                 </div>
-              </>
+                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                  <button
+                    onClick={() => changeQuantity(product.id, -1)}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <span className="font-medium">{product.quantity}</span>
+                  <button
+                    onClick={() => changeQuantity(product.id, 1)}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="flex gap-2 ml-2 mt-2 sm:mt-0">
+                  <button
+                    onClick={() => handleEdit(product)}
+                    className="btn btn-ghost btn-sm text-blue-500"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    onClick={() => setProductToDelete(product)}
+                    className="btn btn-ghost btn-sm text-red-500"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
             )}
           </li>
         ))}
@@ -239,10 +244,10 @@ export default function ProductList() {
         )}
       </ul>
 
-      {/* Modal d’ajout */}
+      {/* Modal d'ajout */}
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
 
-      {/* Confirmation de suppression */}
+      {/* Confirmation suppression */}
       {productToDelete && (
         <div className="modal modal-open">
           <div className="modal-box">
