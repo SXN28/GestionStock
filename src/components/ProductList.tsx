@@ -33,35 +33,42 @@ export default function ProductList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     let unsubSnapshot: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      console.log("User UID:", user?.uid);
+
       if (!user) {
         setProducts([]);
         setLoading(false);
         return;
       }
 
-      console.log("User UID:", user.uid);
+      const q = query(collection(db, "products"), where("userId", "==", user.uid));
 
-      const q = query(
-        collection(db, "products"),
-        where("userId", "==", user.uid)
+      unsubSnapshot = onSnapshot(
+        q,
+        (snapshot) => {
+          const prods = snapshot.docs.map((doc) => {
+            console.log("Doc fetched:", doc.id, doc.data());
+            return { id: doc.id, ...doc.data() } as Product;
+          });
+
+          console.log("All products for user:", prods);
+
+          const sorted = [...prods].sort((a, b) =>
+            sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
+          );
+
+          setProducts(sorted);
+          setLoading(false);
+        },
+        (error) => {
+          console.error("Snapshot error:", error);
+          setLoading(false);
+        }
       );
-
-      unsubSnapshot = onSnapshot(q, (snapshot) => {
-        const prods = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Product[];
-
-        const sorted = [...prods].sort((a, b) =>
-          sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
-        );
-
-        setProducts(sorted);
-        setLoading(false);
-      });
     });
 
     return () => {
@@ -137,7 +144,11 @@ export default function ProductList() {
   );
 
   if (loading)
-    return <p className="text-center mt-4 text-gray-500">Chargement des produits...</p>;
+    return (
+      <p className="text-center mt-4 text-gray-500">
+        Chargement des produits...
+      </p>
+    );
 
   return (
     <div className="w-full max-w-3xl mx-auto">
