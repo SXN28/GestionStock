@@ -14,9 +14,9 @@ export default function Navbar() {
 
   return (
     <div className="navbar bg-base-100 shadow-md px-6">
-      <div className="flex-1">
+      <div className="flex-1 inline-flex gap-2">
         <User className="w-5 h-5 text-primary" />
-          <span className="text-sm">{user.displayName || user.email}</span>
+        <span className="text-sm">{user.displayName || user.email}</span>
       </div>
 
       <div className="flex-none gap-3">

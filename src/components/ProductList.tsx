@@ -20,6 +20,7 @@ interface Product {
   ref: number;
   quantity: number;
   userId: string;
+  image?: string; // ajout du champ image
 }
 
 export default function ProductList() {
@@ -37,8 +38,6 @@ export default function ProductList() {
     let unsubSnapshot: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
-      console.log("User UID:", user?.uid);
-
       if (!user) {
         setProducts([]);
         setLoading(false);
@@ -50,17 +49,10 @@ export default function ProductList() {
       unsubSnapshot = onSnapshot(
         q,
         (snapshot) => {
-          const prods = snapshot.docs.map((doc) => {
-            console.log("Doc fetched:", doc.id, doc.data());
-            return { id: doc.id, ...doc.data() } as Product;
-          });
-
-          console.log("All products for user:", prods);
-
+          const prods = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Product));
           const sorted = [...prods].sort((a, b) =>
             sortQty === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity
           );
-
           setProducts(sorted);
           setLoading(false);
         },
@@ -94,11 +86,7 @@ export default function ProductList() {
   };
 
   const handleSave = async (id: string) => {
-    if (
-      !editedProduct.name ||
-      editedProduct.ref === undefined ||
-      editedProduct.quantity === undefined
-    ) {
+    if (!editedProduct.name || editedProduct.ref === undefined || editedProduct.quantity === undefined) {
       toast.error("Tous les champs doivent être remplis !");
       return;
     }
@@ -108,6 +96,7 @@ export default function ProductList() {
         name: editedProduct.name,
         ref: editedProduct.ref,
         quantity: editedProduct.quantity,
+        image: editedProduct.image || "none",
       });
       toast.success("Produit mis à jour !");
       setEditingId(null);
@@ -138,32 +127,26 @@ export default function ProductList() {
   };
 
   const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.ref.toString().includes(search)
+    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.ref.toString().includes(search)
   );
 
   if (loading)
-    return (
-      <p className="text-center mt-4 text-gray-500">
-        Chargement des produits...
-      </p>
-    );
+    return <p className="text-center mt-4 text-gray-500">Chargement des produits...</p>;
 
   return (
     <div className="w-full max-w-3xl mx-auto">
       {/* Barre de recherche et filtre */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
-        <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full min-h-5">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch gap-2 mb-4 h-11">
+        <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full items-stretch">
           <input
             type="text"
             placeholder="🔍 Rechercher par nom ou référence..."
-            className="input input-bordered flex-1 min-h-5"
+            className="input input-bordered flex-1 h-full"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select
-            className="select select-bordered w-44"
+            className="h-full select select-bordered w-44"
             value={sortQty}
             onChange={(e) => setSortQty(e.target.value as "asc" | "desc")}
           >
@@ -172,19 +155,20 @@ export default function ProductList() {
           </select>
         </div>
         <button
-          className="btn btn-primary mt-2 sm:mt-0"
+          className="btn btn-primary h-full mt-2 sm:mt-0"
           onClick={() => setIsModalOpen(true)}
         >
           <Plus className="w-4 h-4 mr-1" /> Ajouter
         </button>
       </div>
 
+
       {/* Liste des produits */}
       <ul className="space-y-2">
         {filteredProducts.map((product) => (
           <li
             key={product.id}
-            className="flex flex-col sm:flex-row justify-between items-center p-3 bg-base-100 shadow rounded-lg"
+            className="flex flex-col sm:flex-row justify-between items-center p-3 bg-base-100 shadow rounded-lg border-1 border-gray-500"
           >
             {editingId === product.id ? (
               <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
@@ -209,10 +193,16 @@ export default function ProductList() {
                   className="input input-sm input-bordered w-24"
                   value={editedProduct.quantity}
                   onChange={(e) =>
-                    setEditedProduct({
-                      ...editedProduct,
-                      quantity: Number(e.target.value),
-                    })
+                    setEditedProduct({ ...editedProduct, quantity: Number(e.target.value) })
+                  }
+                />
+                <input
+                  type="text"
+                  className="input input-sm input-bordered w-36"
+                  placeholder="Image URL"
+                  value={editedProduct.image || ""}
+                  onChange={(e) =>
+                    setEditedProduct({ ...editedProduct, image: e.target.value })
                   }
                 />
                 <button
@@ -224,10 +214,26 @@ export default function ProductList() {
               </div>
             ) : (
               <div className="flex justify-between items-center flex-1 w-full">
-                <div>
-                  <p className="font-semibold">{product.name}</p>
-                  <p className="text-xs text-gray-500">Réf : {product.ref}</p>
+                <div className="flex items-center gap-3">
+                  {product.image && product.image !== "none" ? (
+                    <div className="w-12 h-16 flex-shrink-0 flex items-center justify-center bg-gray-100 rounded">
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="max-h-full w-auto object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
+                      Aucun
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-semibold">{product.name}</p>
+                    <p className="text-xs text-gray-500">Réf : {product.ref}</p>
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-2 mt-2 sm:mt-0">
                   <button
                     onClick={() => changeQuantity(product.id, -1)}
@@ -275,20 +281,12 @@ export default function ProductList() {
         <div className="modal modal-open">
           <div className="modal-box">
             <h3 className="font-bold text-lg">Supprimer {productToDelete.name} ?</h3>
-            <p className="py-4">
-              Cette action est irréversible. Veux-tu continuer ?
-            </p>
+            <p className="py-4">Cette action est irréversible. Veux-tu continuer ?</p>
             <div className="modal-action">
-              <button
-                onClick={() => setProductToDelete(null)}
-                className="btn btn-ghost"
-              >
+              <button onClick={() => setProductToDelete(null)} className="btn btn-ghost">
                 Annuler
               </button>
-              <button
-                onClick={() => handleDelete(productToDelete.id)}
-                className="btn btn-error"
-              >
+              <button onClick={() => handleDelete(productToDelete.id)} className="btn btn-error">
                 Supprimer
               </button>
             </div>

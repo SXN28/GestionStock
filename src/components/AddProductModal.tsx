@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { addDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Plus, Camera } from "lucide-react";
@@ -14,53 +14,75 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
   const [name, setName] = useState("");
   const [ref, setRef] = useState<number | "">("");
   const [quantity, setQuantity] = useState<number | "">("");
+  const [image, setImage] = useState<string>("none");
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  if (!isOpen) return null;
+  // Fonction pour récupérer le produit depuis l'API
+  const fetchProductFromAPI = async (barcode: number) => {
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        setName(data.product.product_name || "");
+        setImage(data.product.image_front_small_url || "none");
+      } else {
+        setName("");
+        setImage("none");
+        toast("Produit non trouvé, saisissez-le manuellement", { icon: "⚠️" });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la récupération du produit");
+      setName("");
+      setImage("none");
+    }
+  };
+
+  // Déclencher la recherche si l'utilisateur saisit un code-barres manuellement
+  useEffect(() => {
+    if (ref !== "") {
+      fetchProductFromAPI(Number(ref));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = auth.currentUser;
-    if (!user || !name || ref === "" || quantity === "") {
-      toast.error("Veuillez remplir tous les champs");
-      return;
-    }
+    if (!user) return;
+    if (!name || ref === "" || quantity === "") return;
 
     try {
-      // Vérifie si le produit existe déjà pour cet utilisateur
-      const q = query(
-        collection(db, "products"),
-        where("userId", "==", user.uid),
-        where("ref", "==", Number(ref))
-      );
-      const snapshot = await getDocs(q);
+      const productsRef = collection(db, "products");
+      const q = query(productsRef, where("userId", "==", user.uid), where("ref", "==", Number(ref)));
+      const querySnapshot = await getDocs(q);
 
-      if (!snapshot.empty) {
-        // Produit existant : incrémente la quantité
-        const docRef = snapshot.docs[0].ref;
-        const oldQty = snapshot.docs[0].data().quantity as number;
-        await updateDoc(docRef, {
-          quantity: oldQty + Number(quantity),
-        });
-        toast.success("Quantité mise à jour pour le produit existant !");
+      if (!querySnapshot.empty) {
+        // doublon : ajouter quantité
+        const docRef = querySnapshot.docs[0].ref;
+        const existingQuantity = querySnapshot.docs[0].data().quantity || 0;
+        await updateDoc(docRef, { quantity: existingQuantity + Number(quantity) });
+        toast.success("Quantité ajoutée au produit existant !");
       } else {
-        // Nouveau produit
-        await addDoc(collection(db, "products"), {
+        await addDoc(productsRef, {
           name,
           ref: Number(ref),
           quantity: Number(quantity),
           userId: user.uid,
+          image,
         });
-        toast.success("Produit ajouté avec succès !");
+        toast.success("Produit ajouté !");
       }
 
+      // reset
       setName("");
       setRef("");
       setQuantity("");
+      setImage("none");
       onClose();
-    } catch (err) {
-      console.error("Erreur ajout produit :", err);
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du produit :", error);
       toast.error("Erreur lors de l'ajout du produit");
     }
   };
@@ -70,15 +92,18 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
     const codeReader = new BrowserMultiFormatReader();
     try {
       const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
-      setRef(Number(result.getText()));
-      toast.success("Code-barres scanné avec succès !");
+      const barcode = Number(result.getText());
+      setRef(barcode);
       setScanning(false);
+      await fetchProductFromAPI(barcode);
     } catch (err) {
       console.error("Erreur scan :", err);
       toast.error("Erreur lors du scan");
       setScanning(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal modal-open">
@@ -97,7 +122,7 @@ export default function AddProductModal({ isOpen, onClose }: AddProductModalProp
           <div className="flex gap-2 items-center">
             <input
               type="number"
-              placeholder="Réf"
+              placeholder="Réf / Code-barres"
               className="input input-bordered flex-1"
               value={ref}
               onChange={(e) => setRef(e.target.value ? Number(e.target.value) : "")}
