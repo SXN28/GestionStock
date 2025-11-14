@@ -20,7 +20,7 @@ interface Product {
   ref: number;
   quantity: number;
   userId: string;
-  image?: string; // ajout du champ image
+  image?: string;
 }
 
 export default function ProductList() {
@@ -134,19 +134,19 @@ export default function ProductList() {
     return <p className="text-center mt-4 text-gray-500">Chargement des produits...</p>;
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
+    <div className="w-full max-w-3xl mx-auto p-2">
       {/* Barre de recherche et filtre */}
-      <div className="flex flex-col sm:flex-row justify-between items-stretch gap-2 mb-4 h-11">
-        <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full items-stretch">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch gap-2 mb-4 sm:mb-4">
+        <div className="flex flex-col sm:flex-row gap-2 w-full items-stretch space-y-2 sm:space-y-0">
           <input
             type="text"
             placeholder="🔍 Rechercher par nom ou référence..."
-            className="input input-bordered flex-1 h-full"
+            className="input input-bordered flex-1 min-h-[40px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select
-            className="h-full select select-bordered w-44"
+            className="select select-bordered w-full sm:w-44 min-h-[40px]"
             value={sortQty}
             onChange={(e) => setSortQty(e.target.value as "asc" | "desc")}
           >
@@ -155,20 +155,19 @@ export default function ProductList() {
           </select>
         </div>
         <button
-          className="btn btn-primary h-full mt-2 sm:mt-0"
+          className="btn btn-primary w-full sm:w-auto min-h-[40px]"
           onClick={() => setIsModalOpen(true)}
         >
           <Plus className="w-4 h-4 mr-1" /> Ajouter
         </button>
       </div>
 
-
       {/* Liste des produits */}
       <ul className="space-y-2">
         {filteredProducts.map((product) => (
           <li
             key={product.id}
-            className="flex flex-col sm:flex-row justify-between items-center p-3 bg-base-100 shadow rounded-lg border-1 border-gray-500"
+            className="flex flex-wrap sm:flex-nowrap justify-between items-center p-3 bg-base-100 shadow rounded-lg border"
           >
             {editingId === product.id ? (
               <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
@@ -182,7 +181,7 @@ export default function ProductList() {
                 />
                 <input
                   type="number"
-                  className="input input-sm input-bordered w-24"
+                  className="input input-sm input-bordered w-full sm:w-24"
                   value={editedProduct.ref}
                   onChange={(e) =>
                     setEditedProduct({ ...editedProduct, ref: Number(e.target.value) })
@@ -190,7 +189,7 @@ export default function ProductList() {
                 />
                 <input
                   type="number"
-                  className="input input-sm input-bordered w-24"
+                  className="input input-sm input-bordered w-full sm:w-24"
                   value={editedProduct.quantity}
                   onChange={(e) =>
                     setEditedProduct({ ...editedProduct, quantity: Number(e.target.value) })
@@ -198,7 +197,7 @@ export default function ProductList() {
                 />
                 <input
                   type="text"
-                  className="input input-sm input-bordered w-36"
+                  className="input input-sm input-bordered w-full sm:w-36"
                   placeholder="Image URL"
                   value={editedProduct.image || ""}
                   onChange={(e) =>
@@ -213,8 +212,9 @@ export default function ProductList() {
                 </button>
               </div>
             ) : (
-              <div className="flex justify-between items-center flex-1 w-full">
-                <div className="flex items-center gap-3">
+              <div className="flex w-full items-center gap-3">
+                {/* Contenu gauche : image + nom */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   {product.image && product.image !== "none" ? (
                     <div className="w-12 h-16 flex-shrink-0 flex items-center justify-center bg-gray-100 rounded">
                       <img
@@ -228,40 +228,31 @@ export default function ProductList() {
                       Aucun
                     </div>
                   )}
-                  <div>
-                    <p className="font-semibold">{product.name}</p>
-                    <p className="text-xs text-gray-500">Réf : {product.ref}</p>
+                  <div className="truncate">
+                    <p className="font-semibold truncate">{product.name}</p>
+                    <p className="text-xs text-gray-500 truncate">Réf : {product.ref}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                  <button
-                    onClick={() => changeQuantity(product.id, -1)}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <span className="font-medium">{product.quantity}</span>
-                  <button
-                    onClick={() => changeQuantity(product.id, 1)}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-                <div className="flex gap-2 ml-2 mt-2 sm:mt-0">
-                  <button
-                    onClick={() => handleEdit(product)}
-                    className="btn btn-ghost btn-sm text-blue-500"
-                  >
-                    <Pencil size={18} />
-                  </button>
-                  <button
-                    onClick={() => setProductToDelete(product)}
-                    className="btn btn-ghost btn-sm text-red-500"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                {/* Contenu droit : quantité + boutons */}
+                <div className="flex items-center gap-2 mt-2 sm:mt-0 ml-auto flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => changeQuantity(product.id, -1)} className="btn btn-ghost btn-sm">
+                      <Minus size={16} />
+                    </button>
+                    <span className="font-medium">{product.quantity}</span>
+                    <button onClick={() => changeQuantity(product.id, 1)} className="btn btn-ghost btn-sm">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleEdit(product)} className="btn btn-ghost btn-sm text-blue-500">
+                      <Pencil size={18} />
+                    </button>
+                    <button onClick={() => setProductToDelete(product)} className="btn btn-ghost btn-sm text-red-500">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
